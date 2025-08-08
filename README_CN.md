@@ -11,15 +11,6 @@
 
 Alchemd 是基于 Python 的相对结合自由能(RBFE)计算工具包。该软件提供分子准备、动力学模拟和热力学分析的集成平台，配备增强收敛算法。
 
-### 主要特性
-
-- **自动化FEP工作流程**：从结构准备到统计分析的完整流水线
-- **约束性对接**：使用WatVina进行分子准备阶段的约束性分子对接 ([GitHub](https://github.com/biocheming/watvina))
-- **基于Amber的模拟**：利用Amber PMEMD引擎进行分子动力学模拟
-- **CAR方法**：自适应收敛判断方法 ([DOI](https://pubs.acs.org/doi/10.1021/acs.jctc.4c00939))
-- **cs-fep实现**：新型热力学路径 ([DOI](https://doi.org/10.1016/j.apsb.2024.06.021))
-- **统计分析**：自动报告生成和收敛性评估
-
 ## 系统要求
 
 - **操作系统**：Linux (Ubuntu 18.04+) 或 Windows (需要 WSL2)

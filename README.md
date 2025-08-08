@@ -11,15 +11,6 @@
 
 Alchemd is a Python-based toolkit for Relative Binding Free Energy (RBFE) calculations. The software provides an integrated platform for molecular preparation, dynamics simulation, and thermodynamic analysis with enhanced convergence algorithms.
 
-### Key Features
-
-- **Automated FEP Workflow**: Complete pipeline from structure preparation to statistical analysis
-- **Constraint Docking**: Integrated WatVina for constraint-based molecular docking in structure preparation ([GitHub](https://github.com/biocheming/watvina))
-- **Amber-Based Simulations**: Utilizes Amber PMEMD engine for robust molecular dynamics  
-- **CAR Method**: Adaptive convergence assessment method ([DOI](https://pubs.acs.org/doi/10.1021/acs.jctc.4c00939))
-- **cs-fep Implementation**: Novel thermodynamic pathway ([DOI](https://doi.org/10.1016/j.apsb.2024.06.021))
-- **Statistical Analysis**: Automated report generation with convergence assessment
-
 ## System Requirements
 
 - **Operating System**: Linux (Ubuntu 18.04+) or Windows with WSL2
