@@ -1,0 +1,42 @@
+[Basic_settings]
+simulation_software = openmm
+file_directory = "."
+file_prefix = <AUTOFILL>
+file_suffix = '.csv'
+subsample = False
+fraction = 1.0
+output_csv_filename = 'free_ene.csv'
+energy_unit = 'kcal/mol'
+calculation_windows = all
+std_mode = bar_std # could be bar_std or bootstrap_std
+plot_du = False
+
+[Convergence_analysis]
+Time_series = True
+Boltzmann_weight_PdU = False
+Curve_Fitting_Method = False
+Bennett_Overlap_Value = False
+Pai_Value = False
+MeasurementOfConvergence_Value = False
+Reweighting_SelfConsistent = False
+
+[Reweighting_analysis]
+reweight_use_wins_step = 0.0
+reweight_use_wins_num = 1
+ifforward = True
+ifdiagnum = True
+ifplotheatmap = True
+ifreweight_time_serial = True
+reweight_err_bar_max = 2.0
+
+[Time_series_analysis]
+useFEP_check_everywins_Time_series = False
+plot_plan = 'forward|reverse|moving' # could be 'forward|reverse|moving' or 'forward|reverse' or 'forward' or 'reverse' or 'moving', not supporting for 'forward|moving' or 'reverse|moving'
+std_step_ratio = 0.1 # To assign the width that is used in the standard deviation of every single time_ratio point, which uses the pd.df.rolling(std_step_ratio).std() to calculate std (e.g. std_step_ratio: 0.1, The data forward 10% of each point will be used to calculate std)
+divided_ratio = 0.01 # To determine the number of points in the time series will be used to show the convergence of the time serie (e.g. divided_ratio: 0.01, Will generate 100 points like 0.01, 0.02, 0.03, 0.04, ..., 1.00)
+width_ratio = 0.2 # To determine the width of the fixed width of the moving time interval
+ifplot_bar_time_series = True
+iflog_fep_csv = False
+iflog_bar_csv = True
+ifplot_fep_time_series = False
+use_forward = True

@@ -1,0 +1,37 @@
+--- ti.F90	2024-04-30 01:47:47.000000000 +0800
++++ ti.F90_new	2025-01-25 13:05:01.761431945 +0800
+@@ -898,34 +898,6 @@
+   nadj = 0
+   crd_diff = 0.d0
+ 
+-  !reorder atoms so that if linear atoms are out of order in the prmtop
+-  !the simulation will still run 
+-  ti_latm_lst_sort(:) = 0
+-  picked(:)=.false.
+-  do k = 1,20
+-  do i = 1, ti_latm_cnt(1)
+-      if (ti_latm_lst_sort(i) .eq. 0) then
+-    do j = 1, ti_latm_cnt(1)
+-      atm_i = ti_latm_lst(1,i)
+-      atm_j = ti_latm_lst(2,j)
+-        if (.not. picked(atm_j)) then
+-          crd_diff=0.0
+-      do m = 1, 3
+-            crd_diff = crd_diff+ (crd(m, atm_i) - crd(m, atm_j))**2
+-          end do
+-          crd_diff = sqrt(crd_diff)
+-          if (crd_diff .lt. (0.1d0*k) ) then  
+-              ti_latm_lst_sort(i) = atm_j
+-              picked(atm_j)=.true.
+-              exit
+-          end if
+-        end if
+-      end do
+-      end if
+-    end do
+-  end do
+-
+-  ti_latm_lst(2,:) = ti_latm_lst_sort(:)
+ 
+   do i = 1, ti_latm_cnt(1)
+     atm_i = ti_latm_lst(1,i)

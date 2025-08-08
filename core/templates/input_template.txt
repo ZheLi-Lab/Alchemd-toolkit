@@ -1,0 +1,32 @@
+[normalmd]
+normalmd=False
+
+
+[alchemical]
+alchemical = True
+mode = normal
+lambdas_json= <AUTOFILL>
+lambdas_group= <AUTOFILL>
+temperature = 300.0
+timestep = 2
+nsteps = 50
+niterations = 500
+pdbx = <AUTOFILL>
+set_rbfe_exception = True
+current_group_nb = <AUTOFILL>
+current_group_chg = 1
+get_atomset_mode = cs_fep  # normal_by_group, cs_fep, pseudocore
+softcore = ssc2  # gapsys, ssc2, old
+lambdas_per_state = 1  # number of lambdas in lambda_json count as a single state.
+save_traj = False
+reportstate_freq = 1000
+savetraj_freq = 5000
+input_state = <AUTOFILL>
+if_min_heat_density = True
+annihilate_electrostatics = True
+cal_adj_ene_num = 5
+simulation_lambdas_name = <AUTOFILL>
+
+
+[restraint]
+restraint = False

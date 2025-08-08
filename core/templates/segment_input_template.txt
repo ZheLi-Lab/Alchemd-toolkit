@@ -1,0 +1,33 @@
+[normal_alc_md]
+simulation_software     = openmm # should be 'amber' or 'openmm'
+coordinate_file         = <AUTOFILL> # could be '.prmcrd' or '.rst7'
+topology_file           = <AUTOFILL> 
+prod_md_time            = <AUTOFILL> # simulation time of each state with unit in ps
+mbar_lambda_dict_file   = <AUTOFILL>
+input_file              = <AUTOFILL> # could be 'input.json' for amber, 'input.txt' or 'input.temp' for openmm
+segmented_md_control    = False
+if_post_analyze_segment = False
+
+[segmented_md_control]
+segment_lambda_step     = 0.2
+num_neighbors_state     = 5
+min_reitera_times       = 1
+max_reitera_times       = 20
+min_converge_score	= 2
+error_max_lambda_0to1   = 0.1
+analysis_data_proportion= 0.8
+compare_simu_nums       = 3
+time_serials_num        = 10
+ifrun_preliminary_md    = True
+ifuse_initial_rst       = True
+rerun_start_win         = None
+ifuse_current_win_coor  = False
+ifrun_turnaround_points = True
+ifplot_heatmap          = False
+ifoverwrite             = True
+
+[segment_post_analysis]
+analysis_plan           = 'forward' # 'forward|reverse|moving'
+analysis_data_proportion= 0.8
+ifplot_heatmap          = True
+moving_width_times      = 5

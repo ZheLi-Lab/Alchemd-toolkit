@@ -1,0 +1,48 @@
+[ForceField]
+protein_ff = leaprc.protein.ff14SB
+small_molecule_ff = leaprc.gaff2
+lipid_ff = leaprc.lipid17
+water_ff = leaprc.water.tip3p
+externel_amber_parms = "zn-mg.frcmod TPO.frcmod SO4.frcmod"
+externel_amber_prep = "zn.prepi oh.prepi TPO.prepi SO4.prepi"
+[Externel_program_path]
+automd_home = ''
+amber = ''
+gaussian = g03
+amber_md = pmemd.cuda_SPFP
+gaussian_scr_path = __TEMP_DIR__
+[MD_input_parameters]
+restraint_lig = '' # ligand ambmask used for restraint this line can be empty
+restraint_rec = '' # receptor ambmask used for restraint this line can be empty
+restraint_add = '' # additional ambmask used for restraint this line can be empty
+cutoff = 10.0
+final_temp = 300.0
+heat_nstlim = 25000
+density_nstlim = 25000
+equil_nstlim = 50000
+prod_nstlim = 1000000
+prod_steps = 4
+[Preparation_option]
+ligand_pdb = mol.pdb
+lig_residue_name = MOL
+ligand_charge = 0
+receptor_pdb = protein.pdb
+ifonly_small_molecule_prepare = False
+ifonly_protein_prepare = False
+ifcomplex_prepare = False
+charge_model = bcc #or RESP, which need gaussian
+boxtype = 'solvateoct' # [solvatebox|solvateoct]
+boxsize = 10.0
+sbond_file = None
+tleap_file = None
+ifoptimization_ligand = False
+iffull_auto = True
+[Non_standard_amino_acid_prep_option]
+ifonly_nonstandard_aminoacid_prepare = True
+nonstandard_aminoacid_pdb = '__NSAA_PDB__'
+nonstandard_aminoacid_resname = '__NSAA_RESNAME__'
+nonstandard_aminoacid_residx = __NSAA_RESIDX__
+nonstandard_aminoacid_charge_model = resp
+nonstandard_aminoacid_charge = __NSAA_CHG__
+ifoptimization_nonstandard_aminoacid = False
+
