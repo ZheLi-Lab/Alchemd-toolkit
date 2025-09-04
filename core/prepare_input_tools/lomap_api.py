@@ -6,7 +6,14 @@ from rdkit.Chem import rdForceFieldHelpers
 from rdkit.Chem import rdDistGeom
 from rdkit.Chem import rdPartialCharges
 from typing import List
-import lomap
+
+# Try to import lomap, set availability flag
+LOMAP_AVAILABLE = False
+try:
+    import lomap
+    LOMAP_AVAILABLE = True
+except ImportError:
+    LOMAP_AVAILABLE = False
 
 try:
     from pair_func import Pair
@@ -347,6 +354,9 @@ class Lomap_api():
         known_actives_file : str
            the name of a file containing mols whose activity is known
         """
+        if not LOMAP_AVAILABLE:
+            raise ImportError("Lomap library is not available. Please install lomap or provide a pair list file.")
+        
         self._lomap_path = os.path.abspath(lomap_path)
         # print(f"Lomap input files path: {self._lomap_path}")
         self._lomap_out_path = lomap_out_path
@@ -404,6 +414,9 @@ class Lomap_api():
 
 
 def GeneratePairMap(moles: List[Chem.Mol, ], output_pairs_file) -> List[Pair]:
+    if not LOMAP_AVAILABLE:
+        raise ImportError("Lomap library is not available. Please install lomap or provide a pair list file.")
+    
     import tempfile
     origin_cwd = os.getcwd()
     use_moles = copy.deepcopy(moles)

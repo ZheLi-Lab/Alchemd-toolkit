@@ -389,7 +389,7 @@ class MainCalculateFileManager:
                 for pair in error_pairs:
                     f.write(f"{pair}\n")
 
-        logger.info(f"File preparation finished: {job_nums - len(error_pairs)}/{job_nums} pairs successful")
+        logger.info(f"File preparation finished: {job_nums - len(error_pairs)}/{job_nums} pairs success")
 
         with open(calculate_work_queue_lst_file, 'w') as f:
             for line in actual_work_queue_lst:
@@ -452,7 +452,7 @@ def run_submit_bash(all_args):
                     logger.error(f"Job {now_job} error details: {stderr.strip()}")
                 return 1
             else:
-                logger.info(f"Job {now_job} completed successfully")
+                logger.info(f"Job {now_job} success")
                 return 0
         else:
             # Standard subprocess mode for better error handling
@@ -481,7 +481,7 @@ def run_submit_bash(all_args):
                     logger.error(f"Job {now_job} error details: {result.stderr.strip()}")
                 return 1
             
-            logger.info(f"Job {now_job} completed successfully")
+            logger.info(f"Job {now_job} success")
             return 0
         
     except subprocess.TimeoutExpired:
@@ -508,7 +508,7 @@ def auto_cal_and_stat(cal_queue, cal_dir, work_dir):
     rerun_count = 0
     failed_jobs = {}
     
-    while rerun_count < 3:
+    while rerun_count < MAX_RETRIES:
         jobs_to_run = all_cal_jobs if rerun_count == 0 else list(failed_jobs.values())
         
         if not jobs_to_run:
@@ -532,7 +532,7 @@ def auto_cal_and_stat(cal_queue, cal_dir, work_dir):
                     failed_jobs[job_id] = job
         
         if not failed_jobs:
-            logger.info("All jobs completed successfully!")
+            logger.info("All jobs success!")
             break
             
         logger.warning(f"{len(failed_jobs)} jobs failed. Retrying...")

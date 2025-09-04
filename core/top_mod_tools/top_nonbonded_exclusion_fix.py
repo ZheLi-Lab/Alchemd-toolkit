@@ -1,6 +1,7 @@
 import parmed
 import argparse
 import os
+from typing import Union
 
 def read_atom_list(filename):
     with open(filename, 'r') as f:
@@ -45,11 +46,14 @@ def check_and_fix_exclusions(structure, lam_atoms_list, lbm_atoms_list):
 
 
 def check_and_fix_exclusions_from_file(top_file, mutant_list_file, output_file=None,
-                                       verbose=False, if_save=True):
+                                       verbose=False, if_save=True) -> int:
     if output_file is None:
         output_file = top_file.replace(".prmtop", "_fixed.prmtop")
 
-    structure = parmed.amber.LoadParm(top_file)
+    try:
+        structure = parmed.amber.LoadParm(top_file)
+    except:
+        return -1
 
     lam_atoms_list, lbm_atoms_list = read_atom_list(mutant_list_file)
 
@@ -60,11 +64,11 @@ def check_and_fix_exclusions_from_file(top_file, mutant_list_file, output_file=N
             print(f"Moded {fixed_count} LAM-LBM exclusions")
         if if_save:
             structure.save(output_file, overwrite=True)
-        return True
+        return 1
 
     if verbose:
         print("All exclusions set properly")
-    return False
+    return 0
 
 
 def main():

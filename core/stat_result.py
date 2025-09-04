@@ -2,6 +2,7 @@ import copy, pickle, io
 import os, argparse, subprocess, shutil
 import sys
 import re
+import logging
 
 from typing import List, Any, Union, Tuple
 
@@ -31,6 +32,36 @@ from prepare_input_tools.pair_pdb_generator import MolCoordModer
 WCC_PATH = os.path.join(get_default_path('Wcc_Path'), 'wcc_main.py')
 
 SUMMARY_PDF_FILENAME = 'summary.pdf'
+
+# Setup logger
+def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
+    """Setup logger for stat_result module."""
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    
+    if logger.handlers:
+        logger.handlers.clear()
+    
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
+    
+    # Detect WSL environment
+    try:
+        with open('/proc/version', 'r') as f:
+            is_wsl = 'microsoft' in f.read().lower()
+    except (OSError, IOError):
+        is_wsl = False
+    
+    if is_wsl:
+        formatter = logging.Formatter('%(levelname)s: %(message)s')
+    else:
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+logger = setup_logger(__name__, logging.INFO)
 
 edges = ['lM2A', 'lM2B', 'cM2A', 'cM2B']
 
@@ -86,7 +117,7 @@ def merge_convergence_csvs(csv_list, output_csv, std_step_ratio: float = 0.1, if
     rolling_std_column_title = 'Rolling_STD(kcal/mol)'
 
     if len(csv_list) == 0:
-        print('No files to merge.')
+        logger.warning('No files to merge.')
         return False
 
     # print(f'Merging {csv_list}')
@@ -99,7 +130,7 @@ def merge_convergence_csvs(csv_list, output_csv, std_step_ratio: float = 0.1, if
             sum_df[free_energy_column_title] = 0
             break
         except FileNotFoundError:
-            print(f'not csv was found.')
+            logger.warning('CSV file not found.')
 
     if sum_df is None:
         return False
@@ -253,7 +284,7 @@ def moles_to_pages(mol_list: list, title: str = None, page_matrix=(4, 5)):
     for mol in mol_list:
         tmp_mol = Chem.MolFromSmiles(Chem.MolToSmiles(mol, allHsExplicit=True, allBondsExplicit=True))
         AllChem.Compute2DCoords(tmp_mol)
-        _name = mol.GetProp("_Name") if mol.HasProp("_Name") else ''
+        _name = str(mol.GetProp("_Name")) if mol.HasProp("_Name") else ''
         tmp_mol.SetProp("_Name", _name)
         mol_list_2d.append(tmp_mol)
     MCS_bone = MolCoordModer.customized_FindMCS(mol_list_2d)
@@ -286,7 +317,7 @@ def moles_to_pages(mol_list: list, title: str = None, page_matrix=(4, 5)):
     while len(mol_list_2d) > mol_per_page:
         slice_moles = mol_list_2d[:mol_per_page]
         page_moles.append(slice_moles)
-        page_legends.append([_mol.GetProp('_Name') if _mol.HasProp('_Name') else '' for _mol in slice_moles])
+        page_legends.append([str(_mol.GetProp('_Name')) if _mol.HasProp('_Name') else '' for _mol in slice_moles])
         page_highlight_atoms.append(highlight_atoms_list[:mol_per_page])
 
         mol_list_2d = mol_list_2d[mol_per_page:]
@@ -294,7 +325,7 @@ def moles_to_pages(mol_list: list, title: str = None, page_matrix=(4, 5)):
 
     if len(mol_list_2d) > 0:
         page_moles.append(mol_list_2d)
-        page_legends.append([_mol.GetProp('_Name') if _mol.HasProp('_Name') else '' for _mol in mol_list_2d])
+        page_legends.append([str(_mol.GetProp('_Name')) if _mol.HasProp('_Name') else '' for _mol in mol_list_2d])
         page_highlight_atoms.append(highlight_atoms_list)
 
     all_pages = []
@@ -409,7 +440,7 @@ class MainConvergenceMerger:
 
         # for pair in tqdm(self._pairs_list, desc='Merging energy', unit='pair'):
         for i, pair in enumerate(self._pairs_list):
-            print(f'Merging {pair} ({i+1}/{len(self._pairs_list)}) Section [2/4]', flush=True)
+            logger.info(f'Merging {pair} ({i+1}/{len(self._pairs_list)}) Section [2/4]')
             pair_output_path = os.path.join(_output_path, pair)
             os.makedirs(pair_output_path, exist_ok=True)
 
@@ -684,75 +715,96 @@ class MainStater:
         with open(ene_csv, 'w', encoding='utf-8-sig') as f:
             f.write('pair,ΔG_lig_CS_to_A,ΔG_lig_CS_to_B,ΔG_com_CS_to_A,ΔG_com_CS_to_B,total\n')
 
+        # Track successful and failed pairs
+        successful_pairs = 0
+        failed_pairs = 0
+        
         # for pair in tqdm(self.pair_list, desc='Stating pairs', unit='pair'):
         for i, pair in enumerate(self.pair_list):
-            print(f"Stating {pair} ({i + 1}/{len(self.pair_list)}) Section [1/4]", flush=True)
-            pair_wall_time = 0
-            pair_energy = {}
-            pair_page_content = []
-            pair_simu_time = 0
-
-            node1 = pair.split('-')[0]
-            node2 = pair.split('-')[1]
-            if node1 not in node_content_lines:
-                node_content_lines[node1] = {i}
-            else:
-                node_content_lines[node1].add(i)
-            if node2 not in node_content_lines:
-                node_content_lines[node2] = {i}
-            else:
-                node_content_lines[node2].add(i)
-
-            self._edge_description[pair] = {}
-            self._edge_info_dict[pair] = {}
-            self.total_detail_ene_dict[pair] = {}
-
-            for edge in edges:
-                # print(edge)
-                edge_cal_path = os.path.join(self._cal_pair_path_dict[pair], edge)
-                edge_work_path = os.path.join(self._work_pair_path_list[pair], edge)
-                tmp_edge_stater = self.__edge_stater(edge, edge_cal_path, edge_work_path,
-                                                     _log_name=self.__log_name)
-                pair_wall_time += tmp_edge_stater.wall_time
-                pair_simu_time += tmp_edge_stater.simu_time
-                # print(tmp_edge_stater.simu_time)
-                # print(pair_wall_time)
-                pair_energy[edge] = tmp_edge_stater.total_ene
-
-                edge_print_content, edge_title, edge_description = tmp_edge_stater.content
-                pair_page_content.extend(edge_print_content)
-
-                self._edge_description[pair][edge] = edge_description
-                self._edge_info_dict[pair][edge] = (tmp_edge_stater.total_ene,
-                                                    f"{tmp_edge_stater.simu_time / 1000 :.2f} ns")
-                self.total_detail_ene_dict[pair][edge] = tmp_edge_stater.detail_ene_sorted_list
-                # pair_description += f'|<b>{edge}</b>|{edge_description}'
-
-            total_energy = pair_energy['cM2B'] - pair_energy['cM2A'] - (pair_energy['lM2B'] - pair_energy['lM2A'])
-            # pair_description = f'<b>Total tc:</b> {DateParser.convert_from_min(pair_wall_time)} <b>Total ene:</b> {total_energy:.2f}'
-            pair_description = None
-            # self._pair_info_dict[pair] = (total_energy, DateParser.convert_from_min(pair_wall_time))
-            self._pair_info_dict[pair] = (total_energy, f"{pair_simu_time / 1000 :.2f} ns")
-
-            self._pair_description[pair] = pair_description
-            self.page_content_dict[pair] = {'content': pair_page_content, 'title': pair, 'description': pair_description}
-            _csv_line = f"{pair},{pair_energy['lM2A']},{pair_energy['lM2B']},{pair_energy['cM2A']},{pair_energy['cM2B']},{total_energy:.3f}\n"
-            self.print_content_dict[i] = _csv_line
-
-            if abs(total_energy) > 4:
-                sus_pairs.add(pair)
-
-            with open(ene_csv, 'a') as f:
-                f.write(_csv_line)
+            logger.info(f"Stating {pair} ({i + 1}/{len(self.pair_list)}) Section [1/4]")
             
-            self.simu_time += pair_simu_time
+            try:
+                pair_wall_time = 0
+                pair_energy = {}
+                pair_page_content = []
+                pair_simu_time = 0
+
+                node1 = pair.split('-')[0]
+                node2 = pair.split('-')[1]
+                if node1 not in node_content_lines:
+                    node_content_lines[node1] = {i}
+                else:
+                    node_content_lines[node1].add(i)
+                if node2 not in node_content_lines:
+                    node_content_lines[node2] = {i}
+                else:
+                    node_content_lines[node2].add(i)
+
+                self._edge_description[pair] = {}
+                self._edge_info_dict[pair] = {}
+                self.total_detail_ene_dict[pair] = {}
+
+                for edge in edges:
+                    # print(edge)
+                    edge_cal_path = os.path.join(self._cal_pair_path_dict[pair], edge)
+                    edge_work_path = os.path.join(self._work_pair_path_list[pair], edge)
+                    
+                    try:
+                        tmp_edge_stater = self.__edge_stater(edge, edge_cal_path, edge_work_path,
+                                                             _log_name=self.__log_name)
+                        pair_wall_time += tmp_edge_stater.wall_time
+                        pair_simu_time += tmp_edge_stater.simu_time
+                        # print(tmp_edge_stater.simu_time)
+                        # print(pair_wall_time)
+                        pair_energy[edge] = tmp_edge_stater.total_ene
+
+                        edge_print_content, edge_title, edge_description = tmp_edge_stater.content
+                        pair_page_content.extend(edge_print_content)
+
+                        self._edge_description[pair][edge] = edge_description
+                        self._edge_info_dict[pair][edge] = (tmp_edge_stater.total_ene,
+                                                            f"{tmp_edge_stater.simu_time / 1000 :.2f} ns")
+                        self.total_detail_ene_dict[pair][edge] = tmp_edge_stater.detail_ene_sorted_list
+                        # pair_description += f'|<b>{edge}</b>|{edge_description}'
+                    except Exception as edge_e:
+                        logger.warning(f"Failed to process edge {edge} for pair {pair}: {edge_e}")
+                        # Set default values for failed edge
+                        pair_energy[edge] = 0.0
+                        self._edge_description[pair][edge] = None
+                        self._edge_info_dict[pair][edge] = (0.0, "0.00 ns")
+                        self.total_detail_ene_dict[pair][edge] = []
+
+                total_energy = pair_energy['cM2B'] - pair_energy['cM2A'] - (pair_energy['lM2B'] - pair_energy['lM2A'])
+                # pair_description = f'<b>Total tc:</b> {DateParser.convert_from_min(pair_wall_time)} <b>Total ene:</b> {total_energy:.2f}'
+                pair_description = None
+                # self._pair_info_dict[pair] = (total_energy, DateParser.convert_from_min(pair_wall_time))
+                self._pair_info_dict[pair] = (total_energy, f"{pair_simu_time / 1000 :.2f} ns")
+
+                self._pair_description[pair] = pair_description
+                self.page_content_dict[pair] = {'content': pair_page_content, 'title': pair, 'description': pair_description}
+                _csv_line = f"{pair},{pair_energy['lM2A']},{pair_energy['lM2B']},{pair_energy['cM2A']},{pair_energy['cM2B']},{total_energy:.3f}\n"
+                self.print_content_dict[i] = _csv_line
+
+                if abs(total_energy) > 4:
+                    sus_pairs.add(pair)
+
+                with open(ene_csv, 'a') as f:
+                    f.write(_csv_line)
+                
+                self.simu_time += pair_simu_time
+                successful_pairs += 1
+                
+            except Exception as pair_e:
+                logger.warning(f"Failed to process pair {pair}: {pair_e}. Skipping this pair.")
+                failed_pairs += 1
+                continue
         
         groups = self.check_connected_loops(self.pair_list)
         self.connent_group_num = len(groups)
         if len(groups) > 1:
-            print(f"Found {len(groups)} seperate groups in result.", flush=True)
+            logger.info(f"Found {len(groups)} seperate groups in result.")
             for group_counter, group in enumerate(groups):
-                print(f"group {group_counter+1} : {group}")
+                logger.info(f"group {group_counter+1} : {group}")
                 group_line_idxes = set()
                 for node in group:
                     group_line_idxes.update(node_content_lines[node])
@@ -766,6 +818,15 @@ class MainStater:
             with open(sus_csv, 'w') as f:
                 for sus_pair in sus_pairs:
                     f.write(f"{sus_pair}\n")
+        
+        # Log processing summary
+        total_pairs = len(self.pair_list)
+        logger.info("Statistics processing summary:")
+        logger.info(f"Total pairs: {total_pairs}")
+        logger.info(f"Successfully processed: {successful_pairs}")
+        logger.info(f"Failed pairs: {failed_pairs}")
+        if failed_pairs > 0:
+            logger.info(f"Success rate: {successful_pairs/total_pairs*100:.1f}%")
 
 
     def get_pdf_conv_tables(self):
@@ -898,7 +959,7 @@ class MainStater:
         pdf_generator = PDFGenerator.setup_from_Formatter(pdf_format)
         tiny_pdf_generator = PDFGenerator.setup_from_Formatter(pdf_format)
 
-        print('Generating PDF...', flush=True)
+        logger.info('Generating PDF...')
 
         reader = PdfReader(output_pdf)
         exist_pages_num = len(reader.pages)
@@ -907,7 +968,7 @@ class MainStater:
         page_queue = sorted(list(self.page_content_dict.keys()), reverse=False)
 
         for i, page in enumerate(page_queue):
-            print(f"Generating detail PDF page ({i + 1}/{len(page_queue)}) Section [3/4]", flush=True)
+            logger.info(f"Generating detail PDF page ({i + 1}/{len(page_queue)}) Section [3/4]")
             pair_page_content = self.page_content_dict[page]
             full_page = pdf_generator.fast_build_page(pair_page_content['content'],
                                                       title=pair_page_content['title'],
@@ -921,7 +982,7 @@ class MainStater:
         del pdf_generator
 
         for i, page in enumerate(page_queue):
-            print(f"Generating abstract PDF page ({i + 1}/{len(page_queue)}) Section [4/4]", flush=True)
+            logger.info(f"Generating abstract PDF page ({i + 1}/{len(page_queue)}) Section [4/4]")
             pair_page_content = self.page_content_dict[page]
             abstract_page = tiny_pdf_generator.fast_build_page([pair_page_content['content'][-1]],
                                                                title=pair_page_content['title'],
@@ -968,7 +1029,7 @@ class WCC_API:
             p = subprocess.Popen(cmd, shell=True)
             p.wait()
         except IndexError:
-            print('Something wrong with given csv.')
+            logger.error('Something wrong with given csv.')
         wcc_ene_list = []
         node_name_list = []
         node_ene_list = []
@@ -1092,9 +1153,9 @@ def CLIMain(**kwargs):
         ligands = infos['all_moles']
         ligand_list = []
         for name, ligand in ligands.items():
-            ligand.SetProp('_Name', name)
+            ligand.SetProp('_Name', str(name))
             ligand_list.append(ligand)
-        ligand_list = sorted(ligand_list, key=lambda x: x.GetProp('_Name'), reverse=False)
+        ligand_list = sorted(ligand_list, key=lambda x: str(x.GetProp('_Name')), reverse=False)
         pairs = infos['pair_list']
         pdf_mol_content = moles_to_pages(ligand_list, title='Ligands')
 

@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import logging
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, Dict, Set
+from typing import List, Tuple, Optional, Dict, Set, Union, Callable, Iterable
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
@@ -15,7 +15,6 @@ from rdkit.Chem import rdMolDescriptors
 from prepare_input_tools.pdb_preparer import PrepareProteinPDB
 from prepare_input_tools.pair_pdb_generator import GeneratePairPDB, MolCoordModer, WatVina_api
 from prepare_input_tools.pair_pdb_generator import pdb_formatter, pdb_info_clean, working_dir, calculate_formal_charge
-from prepare_input_tools.lomap_api import GeneratePairMap
 from analyze_tools.SettingManager import get_default_path
 from prepare_input_tools.gen_func.collision_checker import CollisionChecker
 from prepare_input_tools.pair_func import Pair, generate_legal_visit_queue, load_pairs, convert2pair
@@ -25,6 +24,16 @@ UNCOMMON_AMINO_ACIDS = ['TLA', 'ZNA', 'TPO']
 # GENAMBRBFE_PATH = os.path.join(get_default_path('GenambRBFE_Path'), 'genambRBFE.sh')
 GENAMBRBFE_BASE_PATH = get_default_path('GenambRBFE_Path')
 GENAMBRBFE_PATH = os.path.join(GENAMBRBFE_BASE_PATH, 'genambRBFE')
+
+# Check lomap availability
+LOMAP_AVAILABLE = False
+GeneratePairMap: Union[None, Callable] = None
+try:
+    from prepare_input_tools.lomap_api import GeneratePairMap, LOMAP_AVAILABLE
+    if LOMAP_AVAILABLE:
+        LOMAP_AVAILABLE = True
+except ImportError:
+    LOMAP_AVAILABLE = False
 
 def setup_logger(logger_name: str, log_level: int = logging.INFO) -> logging.Logger:
     """Setup standardized logger for CADD toolkit."""
@@ -62,7 +71,7 @@ logger = setup_logger(__name__, logging.INFO)
 class PairMap:
     """Graph-based pair mapping for molecular transformations."""
     
-    def __init__(self, pair_list: List[Pair]):
+    def __init__(self, pair_list: Union[List[Pair], Set[Pair]]):
         self.pair_list = pair_list
         self.connect_dict: Dict[str, Set[str]] = {}
         self._build_connection_graph()
@@ -85,7 +94,7 @@ class PairMap:
         return pair1 == pair2
 
     @staticmethod
-    def can_generate_from_nodes(nodes: List[str], pairs: List[Pair], 
+    def can_generate_from_nodes(nodes: List[str], pairs: Union[List[Pair], Set[Pair]], 
                                strict_direction: bool = False) -> Tuple[bool, List[Pair]]:
         """Check if all pairs can be generated from starting nodes."""
         reached_nodes = set(nodes)
@@ -137,7 +146,7 @@ class PairMap:
 
         return BFS_pair_queue, BFS_edge_layer
 
-    def BFS_from_nodes(self, node_list: List[str]) -> Tuple[list, dict]:
+    def BFS_from_nodes(self, node_list: List[str]) -> Tuple[List, Dict]:
         min_layers = {}
         for node in node_list:
             if node not in self.connect_dict.keys():
@@ -167,7 +176,7 @@ class PairMap:
             return_pair_queue.remove(pair)
             min_layers.pop(pair)
 
-        return_pair_queue = convert2pair(return_pair_queue)
+        return_pair_queue = list(convert2pair(return_pair_queue))
         return return_pair_queue, min_layers
 
     def visualize(self, output_png, nodes: list):
@@ -205,7 +214,7 @@ class MolBase:
     ref_moles: List[Chem.Mol]
     ac_moles: List[Chem.Mol]
     protein_pdb: str
-    nsaa_params_dir: str = None
+    nsaa_params_dir: Union[None, str] = None
 
     def __post_init__(self):
         self.all_moles = self.ref_moles + self.ac_moles
@@ -231,7 +240,7 @@ class PairInfo:
 
 
 class RawFileManager:
-    def __init__(self, mol_base: MolBase, output_dir, pair_queue: List):
+    def __init__(self, mol_base: MolBase, output_dir, pair_queue: Union[List, None]):
 
         self.mol_base = mol_base
         self._output_dir = os.path.abspath(output_dir)
@@ -244,9 +253,9 @@ class RawFileManager:
 
         self.pair_info_dict = {}
         self.sbond_lst = None
-        self.dock_pdb = None
+        self.dock_pdb :Union[str, None] = None
         self.prepared_protein_pdb = os.path.join(self._preprocess_dir, 'protein.pdb')
-        self.collision_checker = None
+        self.collision_checker :Union[CollisionChecker, None] = None
 
     def prepare_protein_pdb(self, if_prepare: bool = True):
         prepare_dir = os.path.join(self._preprocess_dir, 'rec_prepare')
@@ -340,6 +349,9 @@ class RawFileManager:
 
         if if_cs_align:
             generated_moles = []
+        
+        if self.pair_generate_queue is None:
+            raise TypeError("pair_queue is None means using folder mode, shouldn't using this function.")
 
         for i, pair in enumerate(self.pair_generate_queue):
             logger.info(f"Generating pair {pair} ({i+1}/{len(self.pair_generate_queue)}) Section [1/{sections}]")
@@ -718,8 +730,18 @@ def CLI_main():
         mol_base = MolBase(ref_moles=ref_moles, ac_moles=ac_moles, protein_pdb=protein_pdb, nsaa_params_dir=args.nsaa_params_dir)
 
         if pair_list is None:
-            logger.info(f"Generate pair map using lomap2.")
-            pair_list = GeneratePairMap(mol_base.all_moles, os.path.join(preprocess_dir, 'pairs.lst'))
+            if not LOMAP_AVAILABLE:
+                logger.warning("Lomap library is not available. Cannot generate pair map automatically.")
+                logger.error("Please install lomap library or provide a pair list file using -pl option.")
+                raise ValueError("Lomap library not available and no pair list provided. Please install lomap or provide a pair list file using -pl option.")
+            
+            logger.info("Generate pair map using lomap2.")
+            try:
+                pair_list = GeneratePairMap(mol_base.all_moles, os.path.join(preprocess_dir, 'pairs.lst'))
+            except Exception as e:
+                logger.error(f"Failed to generate pair map using lomap2: {e}")
+                logger.error("Please provide a pair list file using -pl option.")
+                raise ValueError(f"Pair generation failed: {e}. Please provide a pair list file instead.")
         else:
             pair_list = load_pairs(pair_list)
         
@@ -757,9 +779,9 @@ def CLI_main():
                 vdw_volume_cache = {}
                 for pair in pair_list:
                     if pair.node1 not in vdw_volume_cache:
-                        vdw_volume_cache[pair.node1] = get_mol_vdw_volume(_mol=mol_base.getMol(pair.node1))
+                        vdw_volume_cache[pair.node1] = get_mol_vdw_volume(_mol=mol_base.get_molecule(pair.node1))
                     if pair.node2 not in vdw_volume_cache:
-                        vdw_volume_cache[pair.node2] = get_mol_vdw_volume(_mol=mol_base.getMol(pair.node2))
+                        vdw_volume_cache[pair.node2] = get_mol_vdw_volume(_mol=mol_base.get_molecule(pair.node2))
 
                     _mol1_v = vdw_volume_cache[pair.node1]
                     _mol2_v = vdw_volume_cache[pair.node2]

@@ -379,13 +379,13 @@ class _pair_static_file_path:
 
 
 class BashGenerator:
-    def __init__(self, run_python_file: str = None, run_args: dict = None, log_file: str = 'run.log'):
+    def __init__(self, config: SimulationConfig, run_python_file: str = None, run_args: dict = None, log_file: str = 'run.log',):
         """
         :param log_file: the name of the log file. File name, Ref path or Abs path are both ok.
         """
         self.log_file = log_file
         self.log_file_name = os.path.splitext(self.log_file)[1]
-        if local_run:
+        if config.local_run:
             self.gpu_setup_command = '#!/bin/bash\n'
         else:
             self.gpu_setup_command = '#!/bin/bash\nexport CUDA_DEVICE_ORDER=PCI_BUS_ID\nexport CUDA_VISIBLE_DEVICES=$1\n'
@@ -836,10 +836,12 @@ class MainFileManager:
                 if_nonbonded_exclusion_fix = check_and_fix_exclusions_from_file(top_file=pair_static_files.top_file[edge],
                                                                                 mutant_list_file=mutant_lst_file,
                                                                                 output_file=pair_static_files.top_file[edge].replace(".prmtop", "_fixed.prmtop"))
-                if if_nonbonded_exclusion_fix:
+                if if_nonbonded_exclusion_fix == 1:
                     logger.info(f"Fixed nonbonded exclusions in {pair}-{edge}")
                     shutil.copy2(pair_static_files.top_file[edge], f"{pair_static_files.top_file[edge]}.bck")
                     shutil.copy2(pair_static_files.top_file[edge].replace(".prmtop", "_fixed.prmtop"), pair_static_files.top_file[edge])
+                elif if_nonbonded_exclusion_fix == -1:
+                    logger.info(f"Unable to fix nonboned exclusions in {pair}-{edge}. May lead to error in MD.")
 
                 if not if_amber:
                     fixed_pdbx = _fix_13_16_dislocation(pair_static_files.pdbx_file[edge])
@@ -917,8 +919,7 @@ class MainFileManager_CAR(MainFileManager):
         self.if_AMBER = if_AMBER
 
         self.segment_run_settings = segment_run_settings
-        _default_CAR_run_setting_dict = {'normal_alc_md': {'prod_md_time': 10,
-                                                           'input_file': _ActiveProps.input_filename}}
+        _default_CAR_run_setting_dict = {'normal_alc_md': {'input_file': _ActiveProps.input_filename}}
         self.segment_run_settings.apply_settings_with_dict(_default_CAR_run_setting_dict)
 
         _openmm_run_dict = {'normal_alc_md': {'simulation_software': 'openmm'}}
@@ -1040,7 +1041,8 @@ if __name__ == '__main__':
 
     # Create configuration object
     config = SimulationConfig(
-        work_section_numbers=1 if not args.auto_run else 2
+        work_section_numbers=1 if not args.auto_run else 2,
+        local_run= args.auto_run
     )
 
     WORK_PATH = os.path.dirname(pair_dir)
@@ -1054,18 +1056,17 @@ if __name__ == '__main__':
 
     if _if_auto_run:
         config.work_section_numbers = 2
-        local_run = True
         _ActiveProps.to_run_queue_lst = os.path.join(WORK_PATH, 'to_run_queue.lst')
 
     _py_script = os.path.join(ALCHEMD_PATH, 'openmm-FEP-run.py')
     _py_args = {'-i': _ActiveProps.input_filename,
                 '-p': '<top_file>',
                 '-c': '<crd_file>'}
-    default_bash_generator = BashGenerator(run_python_file=_py_script, run_args=_py_args)
+    default_bash_generator = BashGenerator(run_python_file=_py_script, run_args=_py_args, config=config)
 
     _CAR_py_script = os.path.join(CAR_PATH, 'segmented_converge_control.py')
     _CAR_py_args = {'-i': _ActiveProps.segment_input_filename}
-    segment_bash_generator = BashGenerator(run_python_file=_CAR_py_script, run_args=_CAR_py_args)
+    segment_bash_generator = BashGenerator(run_python_file=_CAR_py_script, run_args=_CAR_py_args, config=config)
 
     default_input_template = os.path.join(TEMPLATE_DIR, 'input_template.txt')
     if car_input is not None and os.path.exists(car_input) and os.path.isfile(car_input):

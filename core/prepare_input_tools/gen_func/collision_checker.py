@@ -128,7 +128,7 @@ class CollisionChecker:
 
         if if_reprepare:
             logger.debug("Reprepare.")
-            re_prepared_pdb = output_pdb_file.replace(".pdb, _amb.pdb")
+            re_prepared_pdb = output_pdb_file.replace(".pdb", "_amb.pdb")
             cmd = f'pdb2pqr {output_pdb_file} out.pdb\
             --titration-state-method=propka\
             --with-ph=7.45 --ffout=AMBER\
