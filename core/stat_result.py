@@ -26,7 +26,9 @@ from analyze_tools.static_pdf_page import PDF_TITLE_STYLE, TABLE_STYLE, static_i
 from analyze_tools.DateParser import DateParser
 from analyze_tools.fast_pdf import PDFGenerator, PDFFormatter
 from analyze_tools.SettingManager import get_default_path
+from analyze_tools.overlap_matrix import analyze_overlap_from_edge_folder
 from plotting_tools.plotting_tools import PLOTTING
+from plotting_tools.plot_overlap_matrix import plot_overlap_heatmap
 from prepare_input_tools.pair_pdb_generator import MolCoordModer
 
 WCC_PATH = os.path.join(get_default_path('Wcc_Path'), 'wcc_main.py')
@@ -168,6 +170,20 @@ def merge_convergence_csvs(csv_list, output_csv, std_step_ratio: float = 0.1, if
 
 def get_normal_processes_folders(path) -> list:
     return [os.path.abspath(path)]
+
+
+def check_pdf_writable(pdf_path: str) -> None:
+    """Check if PDF file is writable. Raise error if locked by another process."""
+    if not os.path.exists(pdf_path):
+        return
+    try:
+        with open(pdf_path, 'r+b'):
+            pass
+    except (IOError, PermissionError) as e:
+        raise PermissionError(
+            f"Cannot write to '{pdf_path}'. "
+            f"Please close the file if it is open in another program (e.g. PDF viewer)."
+        ) from e
 
 
 def _connect_two_tables(title: List[str], table1: List[List], table2: Union[List[List], None]) -> List[List[str]]:
@@ -440,7 +456,7 @@ class MainConvergenceMerger:
 
         # for pair in tqdm(self._pairs_list, desc='Merging energy', unit='pair'):
         for i, pair in enumerate(self._pairs_list):
-            logger.info(f'Merging {pair} ({i+1}/{len(self._pairs_list)}) Section [2/4]')
+            logger.info(f'Merging {pair} ({i+1}/{len(self._pairs_list)}) Section [2/5]')
             pair_output_path = os.path.join(_output_path, pair)
             os.makedirs(pair_output_path, exist_ok=True)
 
@@ -578,6 +594,10 @@ class EdgeStater:
 
         self.total_ene = 0
 
+        self.overlap_matrix = None
+        self.lambda_values = None
+        self.overlap_stats = None
+
         self.stat()
 
     @property
@@ -604,8 +624,21 @@ class EdgeStater:
         self.simu_time = tmp_single_stater.simu_time
 
         self.detail_ene_dict[self._name] = tmp_single_stater.energy
-        
+
         self.detail_ene_sorted_list = sorted(self.detail_ene_dict.items(), key=lambda item: item[0], reverse=False)
+
+        try:
+            overlap_result = analyze_overlap_from_edge_folder(self._edge_cal_folder, group_num=1)
+            if overlap_result is not None:
+                self.overlap_matrix, self.lambda_values, self.overlap_stats = overlap_result
+                logger.info(f"Overlap matrix computed for {self._name}: "
+                          f"{self.overlap_stats['num_states']} states, "
+                          f"min adjacent overlap = {self.overlap_stats['min_adjacent_overlap']:.4f}")
+            else:
+                logger.warning(f"No state CSV files found for {self._name}, skipping overlap calculation")
+        except Exception as e:
+            logger.warning(f"Failed to compute overlap matrix for {self._name}: {e}")
+            self.overlap_matrix = None
 
 
 class MainStater:
@@ -635,6 +668,9 @@ class MainStater:
         self.total_detail_ene_dict = {}
 
         self.print_content_dict = {}
+
+        self._edge_overlap_dict = {}
+        self.overlap_content_dict = {}
 
         self.connent_group_num = 0
         self.simu_time = 0
@@ -721,7 +757,7 @@ class MainStater:
         
         # for pair in tqdm(self.pair_list, desc='Stating pairs', unit='pair'):
         for i, pair in enumerate(self.pair_list):
-            logger.info(f"Stating {pair} ({i + 1}/{len(self.pair_list)}) Section [1/4]")
+            logger.info(f"Stating {pair} ({i + 1}/{len(self.pair_list)}) Section [1/5]")
             
             try:
                 pair_wall_time = 0
@@ -765,6 +801,10 @@ class MainStater:
                         self._edge_info_dict[pair][edge] = (tmp_edge_stater.total_ene,
                                                             f"{tmp_edge_stater.simu_time / 1000 :.2f} ns")
                         self.total_detail_ene_dict[pair][edge] = tmp_edge_stater.detail_ene_sorted_list
+
+                        edge_key = f"{pair}_{edge}"
+                        self._edge_overlap_dict[edge_key] = tmp_edge_stater
+
                         # pair_description += f'|<b>{edge}</b>|{edge_description}'
                     except Exception as edge_e:
                         logger.warning(f"Failed to process edge {edge} for pair {pair}: {edge_e}")
@@ -938,10 +978,6 @@ class MainStater:
 
         output_tiny_pdf = output_pdf.replace('.pdf', '_abstract.pdf')
 
-        # if os.path.exists(output_tiny_pdf):
-        #     os.remove(output_tiny_pdf)
-        # if os.path.exists(output_pdf):
-        #     os.remove(output_pdf)
         specify_fonts = ['FreeMonoBold.ttf', 'NotoSans-VF.ttf', 'arial.ttf', 'DejaVuSansMono.ttf']
         specify_font = 'FreeMonoBold.ttf'
         for font in specify_fonts:
@@ -968,7 +1004,7 @@ class MainStater:
         page_queue = sorted(list(self.page_content_dict.keys()), reverse=False)
 
         for i, page in enumerate(page_queue):
-            logger.info(f"Generating detail PDF page ({i + 1}/{len(page_queue)}) Section [3/4]")
+            logger.info(f"Generating energy convergence PDF page ({i + 1}/{len(page_queue)}) Section [3/5]")
             pair_page_content = self.page_content_dict[page]
             full_page = pdf_generator.fast_build_page(pair_page_content['content'],
                                                       title=pair_page_content['title'],
@@ -979,10 +1015,25 @@ class MainStater:
                                              pdf_file=output_pdf,
                                              )
             del full_page
+
+        overlap_queue = sorted(list(self.overlap_content_dict.keys()), reverse=False)
+        for i, page in enumerate(overlap_queue):
+            logger.info(f"Generating overlap matrix PDF page ({i + 1}/{len(overlap_queue)}) Section [4/5]")
+            pair_overlap_content = self.overlap_content_dict[page]
+            overlap_page = pdf_generator.fast_build_page(pair_overlap_content['content'],
+                                                         title=f"{pair_overlap_content['title']} - Overlap",
+                                                         description=pair_overlap_content['description'],
+                                                         resize=(1200, 1200),
+                                                         restrict_page_size=False)
+            pdf_generator.append_page_to_pdf(overlap_page,
+                                             pdf_file=output_pdf,
+                                             )
+            del overlap_page
+
         del pdf_generator
 
         for i, page in enumerate(page_queue):
-            logger.info(f"Generating abstract PDF page ({i + 1}/{len(page_queue)}) Section [4/4]")
+            logger.info(f"Generating abstract PDF page ({i + 1}/{len(page_queue)}) Section [5/5]")
             pair_page_content = self.page_content_dict[page]
             abstract_page = tiny_pdf_generator.fast_build_page([pair_page_content['content'][-1]],
                                                                title=pair_page_content['title'],
@@ -1008,6 +1059,65 @@ class MainStater:
                                     style=TABLE_STYLE,
                                     x=360, y=130, width=400, height=180,)
         # Avoid OOM.
+
+    def gen_overlap_diagnostic_pages(self):
+        """
+        Generate diagnostic pages showing overlap matrices for all edges.
+
+        Populates self.overlap_content_dict with overlap matrix visualizations
+        for each pair, structured similarly to page_content_dict.
+        """
+        sorted_pair_list = sorted(self.pair_list, reverse=False)
+        generated_count = 0
+        pair_num = len(sorted_pair_list)
+
+        for i, pair in enumerate(sorted_pair_list):
+            pair_overlap_content = []
+            logger.info(f"Generated overlap matrix PNG for {pair} ({i+1}/{pair_num})")
+
+            for edge in edges:
+                edge_key = f"{pair}_{edge}"
+                edge_stater = self._edge_overlap_dict.get(edge_key)
+
+                if edge_stater is None:
+                    logger.warning(f"No EdgeStater found for {edge_key}")
+                    continue
+
+                if edge_stater.overlap_matrix is None:
+                    logger.info(f"No overlap matrix for {edge_key}, skipping")
+                    continue
+
+                overlap_png = os.path.join(self.__stat_path, pair, edge, 'overlap_matrix.png')
+                os.makedirs(os.path.dirname(overlap_png), exist_ok=True)
+
+                try:
+                    plot_overlap_heatmap(
+                        edge_stater.overlap_matrix,
+                        edge_stater.lambda_values,
+                        overlap_png,
+                        show_values=False
+                    )
+
+                    stats = edge_stater.overlap_stats
+                    stats_text = (f"Min Adjacent: {stats['min_adjacent_overlap']:.4f}, "
+                                f"Poor Overlaps: {len(stats['poor_overlaps'])}")
+
+                    edge_title = formalize_edge_name(edge)
+                    pair_overlap_content.append((overlap_png, edge_title, stats_text))
+                    generated_count += 1
+
+                except Exception as e:
+                    logger.warning(f"Failed to generate overlap heatmap for {edge_key}: {e}")
+
+            if pair_overlap_content:
+                self.overlap_content_dict[pair] = {
+                    'content': pair_overlap_content,
+                    'title': pair,
+                    'description': None
+                }
+
+        logger.info(f"Generated {generated_count} overlap matrix visualizations")
+        return generated_count
 
     def clean_file(self):
         if os.path.exists(self.__stat_path):
@@ -1144,6 +1254,10 @@ def CLIMain(**kwargs):
     os.chdir(base_path)
     results_path = os.path.join(base_path, 'results')
     summary_pdf = os.path.join(results_path, SUMMARY_PDF_FILENAME)
+    summary_abstract_pdf = summary_pdf.replace('.pdf', '_abstract.pdf')
+
+    check_pdf_writable(summary_pdf)
+    check_pdf_writable(summary_abstract_pdf)
 
     info_pickle_file = os.path.join(base_path, 'info.pickle')
     pdf_mol_content = []
@@ -1177,6 +1291,12 @@ def CLIMain(**kwargs):
     b = MainConvergenceMerger(calculate_path, pair_list=pair_list)
     b.merge(get_folder_method=get_folder_method, _output_path=results_path)
     a.append_sum_convergence_plots(if_edge_sum=False)
+
+    logger.info("Generating overlap diagnostic section...")
+    overlap_count = a.gen_overlap_diagnostic_pages()
+    if overlap_count == 0:
+        logger.warning("No overlap matrices generated (may be missing state CSV files)")
+
     a.gen_pdf(output_pdf=summary_pdf)
 
     os.chdir(ori_dir)

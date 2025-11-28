@@ -817,15 +817,16 @@ class PDFGenerator:
         for page_num in range(len(reader.pages)):
             page = reader.pages[page_num]
             # print(f"{page_num} {table_datas[page_num]}", flush=True)
-            if table_datas[page_num] is not None:
-                packet = io.BytesIO()
-                can = canvas.Canvas(packet, pagesize=(page_width, page_height))
-                PDFGenerator.draw_table(can, data=table_datas[page_num], style=style, **kwargs)
-                can.save()
-                packet.seek(0)
-                new_pdf = PdfReader(packet)
+            if page_num < len(table_datas):
+                if table_datas[page_num] is not None:
+                    packet = io.BytesIO()
+                    can = canvas.Canvas(packet, pagesize=(page_width, page_height))
+                    PDFGenerator.draw_table(can, data=table_datas[page_num], style=style, **kwargs)
+                    can.save()
+                    packet.seek(0)
+                    new_pdf = PdfReader(packet)
 
-                page.merge_page(new_pdf.pages[0])
+                    page.merge_page(new_pdf.pages[0])
 
             writer.add_page(page)
 
