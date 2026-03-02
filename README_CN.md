@@ -80,6 +80,20 @@ python gui/gui.py
   year={2025},
   url={https://github.com/ZheLi-Lab/Alchemd-toolkit}
 }
+@article{alchemd2025,
+  title = {{ALCHEMD}: {Bridging} {Accessibility} and {Accuracy} in {Automated} {Relative} {Binding} {Free} {Energy} {Workflows}},
+  volume = {22},
+  copyright = {https://doi.org/10.15223/policy-029},
+  issn = {1549-9618, 1549-9626},
+  shorttitle = {{ALCHEMD}},
+  url = {https://pubs.acs.org/doi/10.1021/acs.jctc.5c01857},
+  doi = {10.1021/acs.jctc.5c01857},
+  language = {en},
+  number = {1},
+  journal = {Journal of Chemical Theory and Computation},
+  author = {Liu, Runduo and Zhong, Yilin and Yao, Yufen and Huang, Wanyi and Li, Zongda and Lu, Yuning and Luo, Hai-Bin and Li, Zhe},
+  pages = {750--762},
+}
 ```
 
 **方法学参考文献：**
