@@ -88,13 +88,9 @@ def compute_pairwise_overlap(u_ij: np.ndarray, u_ji: np.ndarray) -> float:
         f_F = fermi(w_F + C)
         f_R = fermi(w_R - C)
 
-        # Average acceptance rates
-        avg_f_F = np.mean(f_F)
-        avg_f_R = np.mean(f_R)
-
-        # Overlap = 2 * min(avg_f_F, avg_f_R)
-        # overlap = 2.0 * min(avg_f_F, avg_f_R)
-        overlap = (np.sum(f_F) + np.sum(f_R)) / (T_F + T_R)
+        # Macro-average: equal weight for forward and reverse directions
+        # regardless of sample size imbalance between T_F and T_R
+        overlap = (np.mean(f_F) + np.mean(f_R)) / 2.0
 
         return min(1.0, max(0.0, overlap))
 
