@@ -56,6 +56,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
+FOREIGN_PROCESS_NAMES = (
+    "python", "bash", "sh",
+    "pmemd", "pmemd.cuda",          # Amber
+    "gmx", "gmx_mpi", "mdrun",      # GROMACS
+    "g09", "g16", "gaussian",       # Gaussian
+)
+
 STATUS_PENDING = "PENDING"
 STATUS_RUNNING = "RUNNING"
 STATUS_DONE    = "DONE"
@@ -206,7 +213,7 @@ def check_gpu_availability(allowed_gpus, managed_pids: set, mem_threshold_mb: in
                     continue
                 try:
                     name = psutil.Process(pid).name().lower()
-                    if any(tok in name for tok in ("python", "bash", "sh")):
+                    if any(tok in name for tok in FOREIGN_PROCESS_NAMES):
                         logger.debug(f"GPU {gpu_id}: foreign process PID={pid} ({name})")
                         occupied_by_others = True
                         break
@@ -360,7 +367,10 @@ Examples:
             logger.info("All jobs completed. Exiting.")
             break
 
-        # GPUs currently occupied by our own managed jobs
+        # GPUs locked by our own managed jobs.
+        # This intentionally includes jobs in analysis phases (CPU-only, no GPU
+        # compute visible via NVML) since their bash process is still alive.
+        # A GPU is only released when the entire bash script exits.
         occupied_gpus = {
             j["gpu_id"]
             for j in jobs
