@@ -1025,6 +1025,10 @@ if __name__ == '__main__':
                             help='customize the car input file.')
     arg_parser.add_argument('-auto', nargs='?', dest='auto_run', const=True, default=False,
                             help='auto run MD after the preparation is finished.')
+    arg_parser.add_argument('-ms', '--md_script', dest='md_script', default=None,
+                            help='path to the MD python script written into submit.sh. '
+                                 'Use this when the compute node has a different path from the prepare node. '
+                                 'Defaults to the path derived from CAR_Path in configs.toml.')
 
 
     args = arg_parser.parse_args()
@@ -1058,13 +1062,19 @@ if __name__ == '__main__':
         config.work_section_numbers = 2
         _ActiveProps.to_run_queue_lst = os.path.join(WORK_PATH, 'to_run_queue.lst')
 
-    _py_script = os.path.join(ALCHEMD_PATH, 'openmm-FEP-run.py')
+    if args.md_script is not None:
+        _py_script = args.md_script
+    else:
+        _py_script = os.path.join(ALCHEMD_PATH, 'openmm-FEP-run.py')
     _py_args = {'-i': _ActiveProps.input_filename,
                 '-p': '<top_file>',
                 '-c': '<crd_file>'}
     default_bash_generator = BashGenerator(run_python_file=_py_script, run_args=_py_args, config=config)
 
-    _CAR_py_script = os.path.join(CAR_PATH, 'segmented_converge_control.py')
+    if args.md_script is not None:
+        _CAR_py_script = args.md_script
+    else:
+        _CAR_py_script = os.path.join(CAR_PATH, 'segmented_converge_control.py')
     _CAR_py_args = {'-i': _ActiveProps.segment_input_filename}
     segment_bash_generator = BashGenerator(run_python_file=_CAR_py_script, run_args=_CAR_py_args, config=config)
 
