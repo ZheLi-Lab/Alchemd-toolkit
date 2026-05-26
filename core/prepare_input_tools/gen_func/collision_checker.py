@@ -134,12 +134,19 @@ class CollisionChecker:
             --with-ph=7.45 --ffout=AMBER\
             --pdb-output={re_prepared_pdb}\
             --display-coupled-residues'
-            result = subprocess.run(cmd, shell=True, 
-                                    stdout=subprocess.PIPE, 
+            result = subprocess.run(cmd, shell=True,
+                                    stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE,
                                     universal_newlines=True,
                                     )
-            shutil.copy2(re_prepared_pdb, output_pdb_file)
+            if result.returncode != 0 or not os.path.exists(re_prepared_pdb):
+                warnings.warn(
+                    f"pdb2pqr reprepare failed for {output_pdb_file} "
+                    f"(returncode={result.returncode}). "
+                    f"Keeping water-removed PDB without re-preparation.\n"
+                )
+            else:
+                shutil.copy2(re_prepared_pdb, output_pdb_file)
 
         return True
         

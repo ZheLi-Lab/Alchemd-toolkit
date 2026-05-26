@@ -23,6 +23,7 @@ import sys
 import time
 import logging
 import subprocess
+import signal
 
 # ---------------------------------------------------------------------------
 # Dependency check: must happen before any other local imports
@@ -142,12 +143,21 @@ def init_state_from_queue(queue_file: str, state_file: str) -> list:
 # ---------------------------------------------------------------------------
 
 def check_process_alive(pid: int) -> bool:
-    """Return True if pid still refers to an active bash/python/sh process."""
+    """Return True if pid refers to a live, non-zombie process we launched."""
     if not psutil.pid_exists(pid):
         return False
     try:
-        name = psutil.Process(pid).name().lower()
-        return any(tok in name for tok in ("bash", "python", "sh"))
+        proc = psutil.Process(pid)
+        if proc.status() == psutil.STATUS_ZOMBIE:
+            # Reap the zombie if we are still its parent; ignore if not.
+            try:
+                os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                pass
+            return False
+        name = proc.name().lower()
+        # Use exact token matching to avoid 'sh' matching 'ssh', 'fish', etc.
+        return name in ("bash", "python", "python3", "sh")
     except psutil.NoSuchProcess:
         return False
 
